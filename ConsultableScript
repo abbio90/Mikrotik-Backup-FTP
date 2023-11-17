@@ -1,0 +1,135 @@
+{
+#----------------------------------------
+# SAVE BACKUP TO FTP SERVER BY foisfabio.it
+# 
+# Script:  Save Backup FTP SERVER
+# Version: 1.0
+# RouterOS v.7.9.2
+# Created: 14/11/2023
+# Updated: --/--/----
+# Author:  Fois Fabio
+# Editor: Fois Fabio
+# Website: https://foisfabio.it
+# Email: consulenza@foisfabio.it
+#
+#----------------------------------------
+
+#COMPILARE LE VARIABILI SOTTOSTANTI:
+
+#INSERIRE INDIRIZZO SERVER"
+:local ipserver "10.250.159.100"
+
+#----------------------------------------
+
+#INSERIRE CREDENZIALI D'ACCESSO
+:local user "admin"
+:local password "password"
+
+#----------------------------------------
+
+#INSERISCI PERCORSO FILE DI DESTINAZIONE
+:local dstpath "/BACKUP_PROXMOX/Mikrotik/"
+              
+#----------------------------------------
+
+ 
+
+############## Don’t edit below this line ##############
+
+:local scheduleName "Backup-FTP"
+:local myRunTime "10d 00:00:00"
+
+:if ([:len [/system scheduler find name="$scheduleName"]] = 0) do={
+
+    /log error "[Backup-FTP] Alert : lo Scheduler non esiste. Creo lo scheduler"
+
+
+
+    /system scheduler add name=$scheduleName interval=$myRunTime start-date=Jan/01/1970 start-time=startup on-event="/system script run Backup-ftp"
+
+
+
+    /log warning "[Backup-FTP] Alert : Scheduler creato ."
+
+}
+
+:local sysname [/system identity get name]
+
+:local textfilename
+
+:local backupfilename
+
+:local time [/system clock get time]
+
+:local date [/system clock get date]
+
+:local newdate "";
+
+:for i from=0 to=([:len $date]-1) do={ :local tmp [:pick $date $i];
+
+:if ($tmp !="/") do={ :set newdate "$newdate$tmp" }
+
+:if ($tmp ="/") do={}
+
+}
+
+#check for spaces in system identity to replace with underscores
+
+:if ([:find $sysname " "] !=0) do={
+
+:local name $sysname;
+
+:local newname "";
+
+:for i from=0 to=([:len $name]-1) do={ :local tmp [:pick $name $i];
+
+:if ($tmp !=" ") do={ :set newname "$newname$tmp" }
+
+:if ($tmp =" ") do={ :set newname "$newname_" }
+
+}
+
+:set sysname $newname;
+
+}
+
+:set textfilename ($"newdate" . "-" . $"sysname" . ".rsc")
+
+:set backupfilename ($"newdate" . "-" . $"sysname" . ".backup")
+
+:execute [/export file=$"textfilename"]
+
+:execute [/system backup save name=$"backupfilename"]
+
+#Allow time for export to complete
+
+:delay 2s
+
+:local time [/system clock get time]
+
+/tool fetch address=$ipserver src-path=$textfilename  user=$user password=$password port=21 upload=yes mode=ftp dst-path=($dstpath."/".$textfilename)
+
+:delay 10s;
+
+/tool fetch address=$ipserver src-path=$backupfilename  user=$user password=$password port=21 upload=yes mode=ftp dst-path=($dstpath."/".$backupfilename)
+
+
+
+
+#Allow time to send
+
+:delay 5s
+
+ 
+
+#delete copies
+
+/file remove $textfilename
+
+
+/file remove $backupfilename
+
+ }
+
+
+
